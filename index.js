@@ -7,12 +7,14 @@ const boardWidth = 560;
 const boardHeight = 300;
 let xDirection = -2;
 let yDirection = 2;
+const destructionSound = new Audio("destroySound.mp3");
+const looseSound = new Audio("looseSound.mp3");
 
 const userStart = [230, 10];
 let currentPosition = userStart;
 
 const ballStart = [270, 40];
-let ballCurrentPosition = ballStart;
+let balls = [{ position: [...ballStart], xDirection: -2, yDirection: 2 }];
 
 let timerId;
 let score = 0;
@@ -51,7 +53,6 @@ function addBlocks() {
     block.style.left = blocks[i].bottomLeft[0] + "px";
     block.style.bottom = blocks[i].bottomLeft[1] + "px";
     grid.appendChild(block);
-    console.log(blocks[i].bottomLeft);
   }
 }
 addBlocks();
@@ -61,24 +62,49 @@ user.classList.add("user");
 grid.appendChild(user);
 drawUser();
 
-const ball = document.createElement("div");
-ball.classList.add("ball");
-grid.appendChild(ball);
-drawBall();
+function drawUser() {
+  user.style.left = currentPosition[0] + "px";
+  user.style.bottom = currentPosition[1] + "px";
+}
+
+// Create balls dynamically
+function createBalls() {
+  balls.forEach((ball, index) => {
+    if (!ball.element) {
+      const ballElement = document.createElement("div");
+      ballElement.classList.add("ball");
+      grid.appendChild(ballElement);
+      ball.element = ballElement;
+    }
+    drawBall(ball);
+  });
+}
+
+function drawBall(ball) {
+  ball.element.style.left = ball.position[0] + "px";
+  ball.element.style.bottom = ball.position[1] + "px";
+}
+
+function moveBalls() {
+  balls.forEach((ball) => {
+    ball.position[0] += ball.xDirection;
+    ball.position[1] += ball.yDirection;
+    drawBall(ball);
+    checkForCollisions(ball);
+  });
+}
 
 function moveUser(e) {
   switch (e.key) {
     case "ArrowLeft":
       if (currentPosition[0] > 0) {
         currentPosition[0] -= 10;
-        console.log(currentPosition[0] > 0);
         drawUser();
       }
       break;
     case "ArrowRight":
       if (currentPosition[0] < boardWidth - blockWidth) {
         currentPosition[0] += 10;
-        console.log(currentPosition[0]);
         drawUser();
       }
       break;
@@ -86,83 +112,70 @@ function moveUser(e) {
 }
 document.addEventListener("keydown", moveUser);
 
-function drawUser() {
-  user.style.left = currentPosition[0] + "px";
-  user.style.bottom = currentPosition[1] + "px";
-}
-function drawBall() {
-  ball.style.left = ballCurrentPosition[0] + "px";
-  ball.style.bottom = ballCurrentPosition[1] + "px";
-}
-
-function moveBall() {
-  ballCurrentPosition[0] += xDirection;
-  ballCurrentPosition[1] += yDirection;
-  drawBall();
-  checkForCollisions();
-}
-timerId = setInterval(moveBall, 30);
-
-function checkForCollisions() {
+function checkForCollisions(ball) {
   for (let i = 0; i < blocks.length; i++) {
     if (
-      ballCurrentPosition[0] > blocks[i].bottomLeft[0] &&
-      ballCurrentPosition[0] < blocks[i].bottomRight[0] &&
-      ballCurrentPosition[1] + ballDiameter > blocks[i].bottomLeft[1] &&
-      ballCurrentPosition[1] < blocks[i].topLeft[1]
+      ball.position[0] > blocks[i].bottomLeft[0] &&
+      ball.position[0] < blocks[i].bottomRight[0] &&
+      ball.position[1] + ballDiameter > blocks[i].bottomLeft[1] &&
+      ball.position[1] < blocks[i].topLeft[1]
     ) {
       const allBlocks = Array.from(document.querySelectorAll(".block"));
+      destructionSound.play();
       allBlocks[i].classList.remove("block");
       blocks.splice(i, 1);
-      changeDirection();
+      ball.yDirection *= -1;
       score++;
       scoreDisplay.innerHTML = score;
-      if (blocks.length == 0) {
+
+      if (score % 5 === 0) {
+        spawnAdditionalBall();
+      }
+
+      if (blocks.length === 0) {
         scoreDisplay.innerHTML = "You Win!";
         clearInterval(timerId);
         document.removeEventListener("keydown", moveUser);
       }
     }
   }
-  if (
-    ballCurrentPosition[0] >= boardWidth - ballDiameter ||
-    ballCurrentPosition[0] <= 0 ||
-    ballCurrentPosition[1] >= boardHeight - ballDiameter
-  ) {
-    changeDirection();
+
+  if (ball.position[0] >= boardWidth - ballDiameter || ball.position[0] <= 0) {
+    ball.xDirection *= -1;
+  }
+  if (ball.position[1] >= boardHeight - ballDiameter) {
+    ball.yDirection *= -1;
   }
 
   if (
-    ballCurrentPosition[0] > currentPosition[0] &&
-    ballCurrentPosition[0] < currentPosition[0] + blockWidth &&
-    ballCurrentPosition[1] > currentPosition[1] &&
-    ballCurrentPosition[1] < currentPosition[1] + blockHeight
+    ball.position[0] > currentPosition[0] &&
+    ball.position[0] < currentPosition[0] + blockWidth &&
+    ball.position[1] > currentPosition[1] &&
+    ball.position[1] < currentPosition[1] + blockHeight
   ) {
-    changeDirection();
+    ball.yDirection *= -1;
   }
 
-  if (ballCurrentPosition[1] <= 0) {
+  if (ball.position[1] <= 0) {
+    looseSound.play();
+    const index = balls.indexOf(ball);
+    if (index > -1) balls.splice(index, 1);
+
     clearInterval(timerId);
     scoreDisplay.innerHTML = "You lose!";
     document.removeEventListener("keydown", moveUser);
   }
 }
 
-function changeDirection() {
-  if (xDirection === 2 && yDirection === 2) {
-    yDirection = -2;
-    return;
-  }
-  if (xDirection === 2 && yDirection === -2) {
-    xDirection = -2;
-    return;
-  }
-  if (xDirection === -2 && yDirection === -2) {
-    yDirection = 2;
-    return;
-  }
-  if (xDirection === -2 && yDirection === 2) {
-    xDirection = 2;
-    return;
-  }
+function spawnAdditionalBall() {
+  const newBall = {
+    position: [...ballStart],
+    xDirection: Math.random() > 0.5 ? 2 : -2,
+    yDirection: Math.random() > 0.5 ? 2 : -2,
+  };
+  balls.push(newBall);
+  createBalls();
 }
+
+createBalls();
+timerId = setInterval(moveBalls, 30);
